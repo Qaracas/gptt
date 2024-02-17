@@ -1,91 +1,236 @@
 #!/usr/bin/env python3
+import locale
 import curses
 import sys
 
-def pinta_en(pantalla, texto):
-    """
-    Pinta en una pantalla
-    """
-    pantalla.addstr(texto + "\n")
-    pantalla.refresh()
+#
+# Funciones básicas
+################################################################################
 
-def edita_pregunta_en(pantalla, carácter, y, x):
-    """
-    Edita el texto en la zona de la preguna
-    """
-    _x = x
+def octetos(val):
+    return bytes([val >> i & 0xff
+                  for i in range(0, val.bit_length(), 8)])
 
-    # Texto a la derecha del cursor
-    txt_drcha = pantalla.instr(y, x).decode('utf-8')
+#
+# Variables globales
+################################################################################
 
-    pantalla.addch(y, _x, carácter)
-    # Avanza el cursor
-    _x = min(_x + 1, curses.COLS - 1)
-    if txt_drcha.strip():
-        try:
-            pantalla.addstr(y, _x, txt_drcha)
-        except curses.error as e:
-            pass # Error, pero addstr hace lo que debe ¿?
-    return _x
+v_codificación = locale.getpreferredencoding()
+v_alto  = 0
+v_ancho = 0
 
-def redimensiona(terminal, pantallas):
+v_diccionario_teclas = {
+    "REDIMENSIONA"     : octetos(curses.KEY_RESIZE),
+    "TABULADOR"        : octetos(9),
+    "CTRL_D"           : octetos(4),
+    "FLECHA_ARRIBA"    : octetos(curses.KEY_UP),
+    "FLECHA_ABAJO"     : octetos(curses.KEY_DOWN),
+    "FLECHA_DERECHA"   : octetos(curses.KEY_RIGHT),
+    "FLECHA_IZQUIERDA" : octetos(curses.KEY_LEFT),
+    "RETROCESO_1"      : octetos(curses.KEY_BACKSPACE),
+    "RETROCESO_2"      : octetos(127)
+}
+v_tecla = v_diccionario_teclas
+
+#
+# Funciones comunes
+################################################################################
+
+def cod(mi):
+    return mi.encode(v_codificación)
+
+def dec(mi):
+    return mi.decode(v_codificación)
+
+def redimensiona(terminal, ventanas):
     """
     Redimensiona el interfaz de usuario. Se llama recibir la tecla especial de
-    KEY_RESIZE
+    curses.KEY_RESIZE
     """
     # Obten las nuevas dimensiones del terminal
-    y, x = terminal.getmaxyx()
+    v_alto, v_ancho = terminal.getmaxyx()
 
-    pantallas["franja_título"].resize(1    , x)
-    pantallas["zona_respuest"].resize(y - 3, x)
-    pantallas["franja_estado"].resize(1    , x)
-    pantallas["zona_pregunta"].resize(1    , x)
+    ventanas["franja_título"].resize(1         , v_ancho)
+    ventanas["zona_respuest"].resize(v_alto - 3, v_ancho)
+    ventanas["franja_estado"].resize(1         , v_ancho)
+    ventanas["zona_pregunta"].resize(1         , v_ancho)
 
-    pantallas["franja_título"].mvwin(0, 0)
-    pantallas["zona_respuest"].mvwin(1, 0)
-    pantallas["franja_estado"].mvwin(y - 2, 0)
-    pantallas["zona_pregunta"].mvwin(y - 1, 0)
+    ventanas["franja_título"].mvwin(0         , 0)
+    ventanas["zona_respuest"].mvwin(1         , 0)
+    ventanas["franja_estado"].mvwin(v_alto - 2, 0)
+    ventanas["zona_pregunta"].mvwin(v_alto - 1, 0)
 
     # Refresca
-    for i in pantallas:
-        pantallas[i].refresh()
+    for i in ventanas:
+        ventanas[i].refresh()
 
-def crea_panel_de_pantallas(terminal, pantallas, indicador):
+def crea_panel_de_ventanas(terminal, ventanas):
     """
     Crea el interfaz de usuario
     """
-    terminal.clear()
+    terminal.erase()
     terminal.refresh()
 
     # y, x - Obten tamaño del terminal
-    alto, ancho = terminal.getmaxyx()
+    v_alto, v_ancho = terminal.getmaxyx()
 
     # Divide la pantalla en tres partes
-    pantallas["franja_título"] = curses.newwin(1       , ancho, 0       , 0)
-    pantallas["zona_respuest"] = curses.newwin(alto - 3, ancho, 1       , 0)
-    pantallas["franja_estado"] = curses.newwin(1       , ancho, alto - 2, 0)
-    pantallas["zona_pregunta"] = curses.newwin(1       , ancho, alto - 1, 0)
+    ventanas["franja_título"] = curses.newwin(1         , v_ancho, 0       , 0)
+    ventanas["zona_respuest"] = curses.newwin(v_alto - 3, v_ancho, 1       , 0)
+    ventanas["franja_estado"] = curses.newwin(1       , v_ancho, v_alto - 2, 0)
+    ventanas["zona_pregunta"] = curses.newwin(1       , v_ancho, v_alto - 1, 0)
 
     ## Borrar ##
-    #pantallas["zona_respuest"].scrollok(True)
+    ventanas["zona_respuest"].scrollok(True)
     ## Borrar ##
 
-    # Limpia las pantallas
-    for i in pantallas:
-        pantallas[i].clear()
+    # Limpia las ventanas
+    for i in ventanas:
+        ventanas[i].erase()
 
     # Colorea la barras de título y modo
-    pantallas["franja_título"].bkgd(' ', curses.color_pair(1))
-    pantallas["franja_estado"].bkgd(' ', curses.color_pair(1))
+    ventanas["franja_título"].bkgd(' ', curses.color_pair(1))
+    ventanas["franja_estado"].bkgd(' ', curses.color_pair(1))
 
-    # Espacio para escribir
-    pantallas["zona_pregunta"].addstr(0, 0, indicador)
-    
     # Refresca
-    for i in pantallas:
-        pantallas[i].refresh()
+    for i in ventanas:
+        ventanas[i].refresh()
 
-def main(terminal):
+#
+# Clases
+################################################################################
+
+class Zona_ES:
+    """
+    Zona de inteacción con el usuario para entrada y salida de texto
+    """
+    def __init__(mi, ventn, y, x, sno = "> "):
+        mi.ventana         = ventn
+        mi.indicador       = sno
+        mi.y               = y
+        mi.x               = x
+        mi.txt_ventn       = ""
+        mi.txt_total       = ""
+        mi.alto, mi.ancho  = mi.ventana.getmaxyx()
+
+        mi.ventana.addstr(0, 0, mi.indicador)
+        mi.ventana.keypad(True)
+        mi.ventana.nodelay(False)
+
+    def actualiza_dimensiones(mi):
+        """
+        Actualiza dimensiones de la zona de e/s
+        """
+        mi.alto, mi.ancho = mi.patalla.getmaxyx()
+
+    def mcursor(mi, y = None, x = None):
+        """
+        Mueve el cursor a la posición (y, x) de la zona de e/s
+        """
+        if y is None:
+            y = mi.y
+        else:
+            mi.y = y
+        if x is None:
+            x = mi.x
+        else:
+            mi.x = x
+        mi.ventana.move(y, x)
+
+    def suma_x(mi, cantidad):
+        """
+        Suma 'cantidad' a la posición x del cursor
+        """
+
+        # Texto visible
+        mi.txt_ventn = dec(mi.ventana.instr(0, len(mi.indicador)))
+        mi.txt_ventn = mi.txt_ventn.strip()
+
+        mi.x = min(mi.x + 1,
+                   len(mi.txt_ventn) + len(mi.indicador), mi.ancho - 1)
+
+    def resta_x(mi, valor):
+        """
+        Resta 'cantidad' a la posición x del cursor
+        """
+        mi.x = max(mi.x - 1, len(mi.indicador))
+
+    def poncar(mi, carácter):
+        """
+        Pon carácter alfanumérico en la zona de e/s
+        """
+        # Texto a la derecha del cursor
+        txt_drcha = dec(mi.ventana.instr(mi.y, mi.x)).rstrip()
+
+        # Pinta carácter y avanza el cursor
+        mi.ventana.addch(mi.y, mi.x, carácter)
+        mi.x = min(mi.x + 1, mi.ancho - 1)
+
+        # Si hay texto a la derecha del cursor se desplaza
+        if txt_drcha:
+            mi.ventana.addstr(mi.y, mi.x, txt_drcha)
+
+        # Guardar texto final
+        # mi.txt_total = mi.trae_txt_visible():
+
+    def __existe_tecla(mi, tecla):
+        for clave, valor in v_diccionario_teclas.items():
+            if valor == tecla:
+                return True
+        return False
+
+    def traecar(mi):
+        """
+        Trae carácter alfanumérico de la zona de e/s
+        """
+        c1 = mi.ventana.getch()
+        car = octetos(c1)
+
+        if (mi.__existe_tecla(car) or c1 < 127):
+            return car
+        else:
+            c2 = mi.ventana.getch()
+            car = bytes([c1, c2])
+
+        return car
+
+    def borrcar(mi):
+        """
+        Borra carácter a la izquierda del cursor y retrocedelo una posición
+        """
+        if mi.x > len(mi.indicador):
+            mi.ventana.delch(mi.y, mi.x - 1)
+            mi.x = max(mi.x - 1, len(mi.indicador))
+
+    def borra_y_reinicia(mi):
+        """
+        Borra zona de e/s y pon el cursor al inicio. El borrado incluye el
+        texto completo, tanto el que se ve en ventana como el que no.
+        """
+        mi.text_ventn = None
+        mi.text_total = None
+        mi.ventana.erase()
+        mi.ventana.addstr(0, 0, mi.indicador)
+        mi.ventana.refresh()
+        mi.mcursor(0, len(mi.indicador));
+
+    def trae_txt_visible(mi):
+        """
+        Devuelve el texto visible a partir del indicador
+        """
+        return dec(mi.ventana.instr(0, len(mi.indicador))).strip()
+
+    def trae_txt_total(mi):
+        """
+        Devuelve todo el texto guardado en la zona (incluido el invisible)
+        """
+        return mi.txt_total
+
+#
+# Función principal
+################################################################################
+
+def inicio(terminal):
     """
     Recubrimiento principal
     """
@@ -96,88 +241,77 @@ def main(terminal):
         texto = fichero.read()
     ## Borrar ##
 
-    indicador = '> '
-    p = {}
-    crea_panel_de_pantallas(terminal, p, indicador)
+    v = {}
+    crea_panel_de_ventanas(terminal, v)
 
-    p["zona_pregunta"].keypad(True)
-    curses.curs_set(1)  # Muestra el cursor
-    y, x = 0, 2         # Posición inicial del cursor
+    # Posición inicial del cursor
+    zona_pregunta = Zona_ES(v["zona_pregunta"], 0, 2)
 
     ## Borrar ##
     # Variables para el desplazamiento vertical.
     dv = 0
-    h, w = p["zona_respuest"].getmaxyx()
+    h, w = v["zona_respuest"].getmaxyx()
     ## Borrar ##
 
     while True:
+        c = zona_pregunta.traecar()
 
-        ## Borrar ##
-        p["zona_respuest"].clear()
-        for i, linea in enumerate(texto.split('\n')[dv:dv+h]):
-            p["zona_respuest"].addstr(i, 0, linea)
-        p["zona_respuest"].refresh()
-        ## Borrar ##
-
-        c = p["zona_pregunta"].getch()
-
-        # Texto mostrado en la zona de pregunta
-        txt_prgnt = p["zona_pregunta"].instr(0, len(indicador)).decode('utf-8')
-        txt_prgnt = txt_prgnt.strip()
-
-        if c == curses.KEY_RESIZE:
-            redimensiona(terminal, p)
-        elif c == 4:       # Ctrl + D
+        if   c == v_tecla["REDIMENSIONA"]:
+            redimensiona(terminal, v)
+        elif c == v_tecla["CTRL_D"]:
             break;
-        elif c == 9:     # Tabulador
-            # Pintar pregunta
-            # pinta_en(p["zona_respuest"], txt_prgnt)
+        elif c == v_tecla["TABULADOR"]:
+            # Pintar pregunta en zona_respuest
+            pass
             # Enviar solicitud a la IA
-            # Pintar respuesta
-            p["zona_pregunta"].clear()
-            p["zona_pregunta"].addstr(0, 0, indicador)
-            p["zona_pregunta"].refresh()
-            y, x = 0, 2
-            p["zona_pregunta"].move(y, x)
+            pass
+            # Pintar respuesta en zona_respuest
+            pass
+            # Borrar para realizar otra pregunta
+            zona_pregunta.borra_y_reinicia()
         ## Borrar ##
-        elif c == curses.KEY_UP:
+        elif c == v_tecla["FLECHA_ARRIBA"]:
             dv = max(0, dv - 1)
-        elif c == curses.KEY_DOWN:
+        elif c == v_tecla["FLECHA_ABAJO"]:
             dv = min(len(texto) - h, dv + 1)
         ## Borrar ##
-        elif c == curses.KEY_LEFT:
-            x = max(x - 1, len(indicador))
-        elif c == curses.KEY_RIGHT:
-            x = min(x + 1, len(txt_prgnt) + len(indicador), curses.COLS - 1)
-        elif (   c == curses.KEY_BACKSPACE
-              or c == 127):
-            if x > len(indicador):
-                p["zona_pregunta"].delch(y, x - 1)
-            x = max(x - 1, len(indicador))
-        elif c >= 32 and c <= 126: ## Muestra en la ventana si es imprimible ##
-            x = edita_pregunta_en(p["zona_pregunta"], c, y, x)
-        elif c >= 127 and c <= 255:
-            d = p["zona_pregunta"].getch()
-            b = bytes([c, d]).decode('utf-8')
-            x = edita_pregunta_en(p["zona_pregunta"], b, y, x)
+        elif c == v_tecla["FLECHA_IZQUIERDA"]:
+            zona_pregunta.resta_x(1)
+        elif c == v_tecla["FLECHA_DERECHA"]:
+            zona_pregunta.suma_x(1)
+        elif (   c == v_tecla["RETROCESO_1"]
+              or c == v_tecla["RETROCESO_2"]):
+            zona_pregunta.borrcar()
+        else: # Pon en la ventana si es un carácter imprimible
+            zona_pregunta.poncar(dec(c))
+
+        ## Borrar ##
+        v["zona_respuest"].erase()
+        for i, linea in enumerate(texto.split('\n')[dv:dv+h]):
+            v["zona_respuest"].addstr(i, 0, linea)
+        v["zona_respuest"].refresh()
+        ## Borrar ##
 
         # Mueve el cursor a la posición actual
-        p["zona_pregunta"].move(y, x)
-        p["zona_pregunta"].refresh()
+        zona_pregunta.mcursor()
 
-    curses.nocbreak()
     terminal.keypad(False)
+    curses.nocbreak()
     curses.echo()
     curses.endwin()
 
 # Ejecutar el programa
 if __name__ == "__main__":
     stdscr = curses.initscr()
+
+    # Colores por defecto y muestra el cursor
     curses.start_color()
     curses.use_default_colors()
+    curses.curs_set(1)
 
     curses.init_pair(1, curses.COLOR_BLUE, curses.COLOR_BLUE)
 
-    curses.wrapper(main)
+    curses.wrapper(inicio)
 
+    print ("Saliendo...")
     sys.exit(0)
