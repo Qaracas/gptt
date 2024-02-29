@@ -32,6 +32,8 @@ v_diccionario_teclas = {
 }
 v_tecla = v_diccionario_teclas
 
+v = {}
+
 #
 # Funciones comunes
 ################################################################################
@@ -104,13 +106,23 @@ class Zona_ES:
     """
     Zona de inteacción con el usuario para entrada y salida de texto
     """
+
+    @property
+    def SALTO(mi):
+        return 20
+
     def __init__(mi, ventn, y, x, sno = "> "):
         mi.ventana         = ventn
         mi.indicador       = sno
-        mi.y               = y
-        mi.x               = x
+        mi.cursor_y        = y
+        mi.cursor_x        = x
         mi.txt_ventn       = ""
         mi.txt_total       = ""
+        mi.txt_total_y     = y
+        mi.txt_total_x     = x
+        mi.puntero_txt     = 0
+        mi.desp_x          = 0
+        mi.desp_y          = 0
         mi.alto, mi.ancho  = mi.ventana.getmaxyx()
 
         mi.ventana.addstr(0, 0, mi.indicador)
@@ -128,50 +140,129 @@ class Zona_ES:
         Mueve el cursor a la posición (y, x) de la zona de e/s
         """
         if y is None:
-            y = mi.y
+            y = mi.cursor_y
         else:
-            mi.y = y
+            mi.cursor_y = y
         if x is None:
-            x = mi.x
+            x = mi.cursor_x
         else:
-            mi.x = x
+            mi.cursor_x = x
         mi.ventana.move(y, x)
 
     def suma_x(mi, cantidad):
         """
-        Suma 'cantidad' a la posición x del cursor
+        Suma 'cantidad' a la posición x del cursor y al índice del texto
         """
+
+        v["zona_respuest"].erase()
+        v["zona_respuest"].addstr(0, 0,
+              "Cursor: " + str(mi.cursor_x)
+            + "; Pos. texto: " + str(mi.puntero_txt)
+            + "; Ancho: " + str(mi.ancho)
+            + "; Log. texto: " + str(len(mi.txt_total)))
+        v["zona_respuest"].refresh()
+
+        # Si la ventana está desbordada
+        if (    mi.cursor_x == (mi.ancho - 1)
+            and len(mi.txt_total) > (mi.ancho - len(mi.indicador) - 1)):
+            mi.reinicia()
+            mi.desp_x += mi.SALTO
+            mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
+                mi.txt_total[mi.desp_x:
+                    mi.desp_x + (mi.ancho - len(mi.indicador) - 1)])
+            # Desplaza puntero
+            mi.puntero_txt = mi.desp_x
 
         # Texto visible
-        mi.txt_ventn = dec(mi.ventana.instr(0, len(mi.indicador)))
-        mi.txt_ventn = mi.txt_ventn.strip()
+        mi.txt_ventn = mi.trae_txt_visible()
 
-        mi.x = min(mi.x + 1,
-                   len(mi.txt_ventn) + len(mi.indicador), mi.ancho - 1)
+        # Texto visible: avanza posición del cursor
+        mi.cursor_x = min(mi.cursor_x + cantidad,
+                    len(mi.txt_ventn) + len(mi.indicador), mi.ancho - 1)
 
-    def resta_x(mi, valor):
+        # Texto memorizado: avanza puntero
+        mi.puntero_txt = min(mi.puntero_txt + cantidad, len(mi.txt_total))
+
+    def resta_x(mi, cantidad):
         """
-        Resta 'cantidad' a la posición x del cursor
+        Resta 'cantidad' a la posición x del cursor y al índice del texto
         """
-        mi.x = max(mi.x - 1, len(mi.indicador))
+
+        v["zona_respuest"].erase()
+        v["zona_respuest"].addstr(0, 0,
+              "Cursor: " + str(mi.cursor_x)
+            + "; Pos. texto: " + str(mi.puntero_txt)
+            + "; Ancho: " + str(mi.ancho)
+            + "; Log. texto: " + str(len(mi.txt_total)))
+        v["zona_respuest"].refresh()
+
+        # Si la ventana está desbordada
+        if (    mi.cursor_x == len(mi.indicador)
+            and mi.desp_x > 0):
+            # Desplazamos texto
+            mi.reinicia()
+            mi.desp_x -= mi.SALTO
+            mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
+                mi.txt_total[mi.desp_x:
+                    mi.desp_x + (mi.ancho - len(mi.indicador) - 1)])
+            # Mueve cursor al final del texto
+            txt_drcha = dec(mi.ventana.instr(mi.cursor_y,
+                mi.cursor_x)).rstrip()
+            mi.mcursor(0, len(txt_drcha) + len(mi.indicador))
+            # Desplaza puntero
+            mi.puntero_txt = mi.desp_x + (mi.ancho - len(mi.indicador) - 1)
+
+        # Texto visible: retrocede posición del cursor
+        mi.cursor_x = max(mi.cursor_x - cantidad, len(mi.indicador))
+
+        # Texto memorizado: retrocede puntero
+        mi.puntero_txt = max(mi.puntero_txt - cantidad, 0)
+
+    def __poncar(mi, texto, carácter, posición):
+        return texto[:posición] + carácter + texto[posición:]
 
     def poncar(mi, carácter):
         """
         Pon carácter alfanumérico en la zona de e/s
         """
+
+        v["zona_respuest"].erase()
+        v["zona_respuest"].addstr(0, 0,
+              "Cursor: " + str(mi.cursor_x)
+            + "; Pos. texto: " + str(mi.puntero_txt)
+            + "; Ancho: " + str(mi.ancho)
+            + "; Log. texto: " + str(len(mi.txt_total)))
+        v["zona_respuest"].refresh()
+
+        # Texto memorizado: añade carácter y avanza puntero
+        mi.txt_total = mi.__poncar(mi.txt_total, carácter, mi.puntero_txt)
+        mi.puntero_txt += 1
+
         # Texto a la derecha del cursor
-        txt_drcha = dec(mi.ventana.instr(mi.y, mi.x)).rstrip()
+        txt_drcha = dec(mi.ventana.instr(mi.cursor_y, mi.cursor_x)).rstrip()
 
-        # Pinta carácter y avanza el cursor
-        mi.ventana.addch(mi.y, mi.x, carácter)
-        mi.x = min(mi.x + 1, mi.ancho - 1)
+        try:
+            # Pinta carácter y avanza el cursor
+            mi.ventana.addch(mi.cursor_y, mi.cursor_x, carácter)
+            mi.cursor_x = min(mi.cursor_x + 1, mi.ancho - 1)
 
-        # Si hay texto a la derecha del cursor se desplaza
-        if txt_drcha:
-            mi.ventana.addstr(mi.y, mi.x, txt_drcha)
-
-        # Guardar texto final
-        # mi.txt_total = mi.trae_txt_visible():
+            # Si hay texto a la derecha del cursor se desplaza
+            if txt_drcha:
+                mi.ventana.addstr(mi.cursor_y, mi.cursor_x, txt_drcha)
+        except curses.error:
+            # Cuando desborda la ventana
+            if (   mi.cursor_x >= mi.ancho
+                or len(mi.txt_total) > (mi.ancho - len(mi.indicador))):
+                pass
+            else:
+                mi.reinicia()
+                mi.desp_x += mi.SALTO
+                mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
+                    mi.txt_total[mi.desp_x:
+                        mi.desp_x + (mi.ancho - len(mi.indicador))])
+                txt_drcha = dec(mi.ventana.instr(mi.cursor_y,
+                    mi.cursor_x)).rstrip()
+                mi.mcursor(0, len(txt_drcha) + len(mi.indicador))
 
     def __existe_tecla(mi, tecla):
         for clave, valor in v_diccionario_teclas.items():
@@ -194,25 +285,42 @@ class Zona_ES:
 
         return car
 
+    def __borrcar(mi, texto, posición):
+        return texto[:posición] + texto[posición + 1:]
+
     def borrcar(mi):
         """
         Borra carácter a la izquierda del cursor y retrocedelo una posición
         """
-        if mi.x > len(mi.indicador):
-            mi.ventana.delch(mi.y, mi.x - 1)
-            mi.x = max(mi.x - 1, len(mi.indicador))
 
-    def borra_y_reinicia(mi):
+        # Texto visible
+        if mi.cursor_x > len(mi.indicador):
+            mi.ventana.delch(mi.cursor_y, mi.cursor_x - 1)
+            mi.cursor_x = max(mi.cursor_x - 1, len(mi.indicador))
+
+        # Texto memorizado
+        if mi.puntero_txt > 0:
+            mi.puntero_txt -= 1
+            mi.txt_total = mi.__borrcar(mi.txt_total, mi.puntero_txt)
+
+    def reinicia(mi):
         """
-        Borra zona de e/s y pon el cursor al inicio. El borrado incluye el
-        texto completo, tanto el que se ve en ventana como el que no.
+        Borra zona de e/s y pon el cursor al inicio. También borra la copia de
+        lo que se ve en la ventana (txt_ventn)
         """
-        mi.text_ventn = None
-        mi.text_total = None
         mi.ventana.erase()
         mi.ventana.addstr(0, 0, mi.indicador)
         mi.ventana.refresh()
         mi.mcursor(0, len(mi.indicador));
+
+    def borra_y_reinicia(mi):
+        """
+        Borra zona de e/s y pon el cursor al inicio. El borrado incluye el
+        texto completo (txt_total), y el que se ve en la ventana (txt_ventn)
+        """
+        mi.txt_ventn = ""
+        mi.txt_total = ""
+        mi.reinicia()
 
     def trae_txt_visible(mi):
         """
@@ -222,7 +330,7 @@ class Zona_ES:
 
     def trae_txt_total(mi):
         """
-        Devuelve todo el texto guardado en la zona (incluido el invisible)
+        Devuelve el texto memorizado
         """
         return mi.txt_total
 
@@ -241,7 +349,7 @@ def inicio(terminal):
         texto = fichero.read()
     ## Borrar ##
 
-    v = {}
+#    v = {}
     crea_panel_de_ventanas(terminal, v)
 
     # Posición inicial del cursor
@@ -286,10 +394,10 @@ def inicio(terminal):
             zona_pregunta.poncar(dec(c))
 
         ## Borrar ##
-        v["zona_respuest"].erase()
-        for i, linea in enumerate(texto.split('\n')[dv:dv+h]):
-            v["zona_respuest"].addstr(i, 0, linea)
-        v["zona_respuest"].refresh()
+#        v["zona_respuest"].erase()
+#        for i, linea in enumerate(texto.split('\n')[dv:dv+h]):
+#            v["zona_respuest"].addstr(i, 0, linea)
+#        v["zona_respuest"].refresh()
         ## Borrar ##
 
         # Mueve el cursor a la posición actual
@@ -300,14 +408,17 @@ def inicio(terminal):
     curses.echo()
     curses.endwin()
 
+    print (zona_pregunta.txt_total)
+
 # Ejecutar el programa
 if __name__ == "__main__":
     stdscr = curses.initscr()
 
-    # Colores por defecto y muestra el cursor
+    # Colores por defecto, mostrar el cursor y desactiva eco
     curses.start_color()
     curses.use_default_colors()
     curses.curs_set(1)
+    curses.noecho()
 
     curses.init_pair(1, curses.COLOR_BLUE, curses.COLOR_BLUE)
 
