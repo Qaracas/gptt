@@ -25,7 +25,7 @@ solicitud = {
             "example": False
         }
     ],
-    "assistant_id": "daede84b-79b7-4166-a277-7ac162c74c11",
+    "assistant_id": "bdc5981d-483e-44a8-bb42-1cced28c3574",
     "thread_id": ""
 }
 

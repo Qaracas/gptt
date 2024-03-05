@@ -165,13 +165,16 @@ class Zona_ES:
         # Si la ventana está desbordada
         if (    mi.cursor_x == (mi.ancho - 1)
             and len(mi.txt_total) > (mi.ancho - len(mi.indicador) - 1)):
+            # Desplaza texto
             mi.reinicia()
             mi.desp_x += mi.SALTO
             mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
                 mi.txt_total[mi.desp_x:
                     mi.desp_x + (mi.ancho - len(mi.indicador) - 1)])
-            # Desplaza puntero
-            mi.puntero_txt = mi.desp_x
+            # Mueve cursor
+            mi.mcursor(0, mi.ancho - mi.SALTO - 1)
+            # No es necesario ajustar puntero
+            # mi.puntero_txt = mi.desp_x
 
         # Texto visible
         mi.txt_ventn = mi.trae_txt_visible()
@@ -199,18 +202,16 @@ class Zona_ES:
         # Si la ventana está desbordada
         if (    mi.cursor_x == len(mi.indicador)
             and mi.desp_x > 0):
-            # Desplazamos texto
+            # Desplaza texto
             mi.reinicia()
             mi.desp_x -= mi.SALTO
             mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
                 mi.txt_total[mi.desp_x:
                     mi.desp_x + (mi.ancho - len(mi.indicador) - 1)])
-            # Mueve cursor al final del texto
-            txt_drcha = dec(mi.ventana.instr(mi.cursor_y,
-                mi.cursor_x)).rstrip()
-            mi.mcursor(0, len(txt_drcha) + len(mi.indicador))
-            # Desplaza puntero
-            mi.puntero_txt = mi.desp_x + (mi.ancho - len(mi.indicador) - 1)
+            # Mueve cursor
+            mi.mcursor(0, mi.SALTO)
+            # Ajusta puntero
+            mi.puntero_txt -= 2
 
         # Texto visible: retrocede posición del cursor
         mi.cursor_x = max(mi.cursor_x - cantidad, len(mi.indicador))
@@ -248,11 +249,13 @@ class Zona_ES:
 
             # Si hay texto a la derecha del cursor se desplaza
             if txt_drcha:
+                if mi.cursor_x + len(txt_drcha) > mi.ancho - 1:
+                    txt_drcha = txt_drcha[0:len(txt_drcha) - 1]
                 mi.ventana.addstr(mi.cursor_y, mi.cursor_x, txt_drcha)
+
         except curses.error:
             # Cuando desborda la ventana
-            if (   mi.cursor_x >= mi.ancho
-                or len(mi.txt_total) > (mi.ancho - len(mi.indicador))):
+            if mi.cursor_x < mi.ancho - 1:
                 pass
             else:
                 mi.reinicia()
@@ -297,6 +300,12 @@ class Zona_ES:
         if mi.cursor_x > len(mi.indicador):
             mi.ventana.delch(mi.cursor_y, mi.cursor_x - 1)
             mi.cursor_x = max(mi.cursor_x - 1, len(mi.indicador))
+
+            # Si la ventana está desbordada
+            if len(mi.txt_total[mi.desp_x:]) > mi.ancho - len(mi.indicador) - 1:
+                mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
+                    mi.txt_total[mi.puntero_txt:
+                        mi.puntero_txt + (mi.ancho - len(mi.indicador) - mi.cursor_x) + 1])
 
         # Texto memorizado
         if mi.puntero_txt > 0:
