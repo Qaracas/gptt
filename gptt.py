@@ -55,12 +55,12 @@ def redimensiona(terminal, ventanas):
     ventanas["franja_título"].resize(1         , v_ancho)
     ventanas["zona_respuest"].resize(v_alto - 3, v_ancho)
     ventanas["franja_estado"].resize(1         , v_ancho)
-    ventanas["zona_pregunta"].resize(1         , v_ancho)
+    ventanas["caja_pregunta"].resize(1         , v_ancho)
 
     ventanas["franja_título"].mvwin(0         , 0)
     ventanas["zona_respuest"].mvwin(1         , 0)
     ventanas["franja_estado"].mvwin(v_alto - 2, 0)
-    ventanas["zona_pregunta"].mvwin(v_alto - 1, 0)
+    ventanas["caja_pregunta"].mvwin(v_alto - 1, 0)
 
     # Refresca
     for i in ventanas:
@@ -80,7 +80,7 @@ def crea_panel_de_ventanas(terminal, ventanas):
     ventanas["franja_título"] = curses.newwin(1         , v_ancho, 0       , 0)
     ventanas["zona_respuest"] = curses.newwin(v_alto - 3, v_ancho, 1       , 0)
     ventanas["franja_estado"] = curses.newwin(1       , v_ancho, v_alto - 2, 0)
-    ventanas["zona_pregunta"] = curses.newwin(1       , v_ancho, v_alto - 1, 0)
+    ventanas["caja_pregunta"] = curses.newwin(1       , v_ancho, v_alto - 1, 0)
 
     ## Borrar ##
     ventanas["zona_respuest"].scrollok(True)
@@ -102,9 +102,9 @@ def crea_panel_de_ventanas(terminal, ventanas):
 # Clases
 ################################################################################
 
-class Zona_ES:
+class CajaTxt:
     """
-    Zona de inteacción con el usuario para entrada y salida de texto
+    Caja donde se introduce texto
     """
 
     @property
@@ -116,10 +116,7 @@ class Zona_ES:
         mi.indicador       = sno
         mi.cursor_y        = y
         mi.cursor_x        = x
-        mi.txt_ventn       = ""
         mi.txt_total       = ""
-        mi.txt_total_y     = y
-        mi.txt_total_x     = x
         mi.puntero_txt     = 0
         mi.desp_x          = 0
         mi.desp_y          = 0
@@ -129,15 +126,36 @@ class Zona_ES:
         mi.ventana.keypad(True)
         mi.ventana.nodelay(False)
 
-    def actualiza_dimensiones(mi):
+    def redimensiona(mi):
         """
-        Actualiza dimensiones de la zona de e/s
+        Actualiza dimensiones de la caja
         """
-        mi.alto, mi.ancho = mi.patalla.getmaxyx()
+        # Nueva dimensión de la pantalla
+        n_alto, n_ancho = mi.ventana.getmaxyx()
+
+        # Eje x: Diferencia
+        dif_x = n_ancho - mi.ancho
+
+        # Eje y: Incremento
+        # inc_y = n_alto - mi.alto
+
+        # Cambia dimensión de la caja
+        mi.alto = n_alto
+        mi.ancho = n_ancho
+
+        # Eje x: Recoloca cursor
+        if mi.cursor_x > mi.ancho:
+            mi.cursor_x = mi.ancho - 2
+            mi.puntero_txt = 
+
+        # Eje x: Redibuja texto a partir del cursor
+        mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
+            mi.txt_total[mi.puntero_txt:
+                mi.puntero_txt + (mi.ancho - len(mi.indicador) - mi.cursor_x) + 1])
 
     def mcursor(mi, y = None, x = None):
         """
-        Mueve el cursor a la posición (y, x) de la zona de e/s
+        Mueve el cursor a la posición (y, x) de la caja
         """
         if y is None:
             y = mi.cursor_y
@@ -159,7 +177,8 @@ class Zona_ES:
               "Cursor: " + str(mi.cursor_x)
             + "; Pos. texto: " + str(mi.puntero_txt)
             + "; Ancho: " + str(mi.ancho)
-            + "; Log. texto: " + str(len(mi.txt_total)))
+            + "; Log. texto: " + str(len(mi.txt_total))
+            + "; Desplazamiento: " + str(mi.desp_x))
         v["zona_respuest"].refresh()
 
         # Si la ventana está desbordada
@@ -177,11 +196,11 @@ class Zona_ES:
             # mi.puntero_txt = mi.desp_x
 
         # Texto visible
-        mi.txt_ventn = mi.trae_txt_visible()
+        txt_ventn = mi.trae_txt_visible()
 
         # Texto visible: avanza posición del cursor
         mi.cursor_x = min(mi.cursor_x + cantidad,
-                    len(mi.txt_ventn) + len(mi.indicador), mi.ancho - 1)
+                    len(txt_ventn) + len(mi.indicador), mi.ancho - 1)
 
         # Texto memorizado: avanza puntero
         mi.puntero_txt = min(mi.puntero_txt + cantidad, len(mi.txt_total))
@@ -196,7 +215,8 @@ class Zona_ES:
               "Cursor: " + str(mi.cursor_x)
             + "; Pos. texto: " + str(mi.puntero_txt)
             + "; Ancho: " + str(mi.ancho)
-            + "; Log. texto: " + str(len(mi.txt_total)))
+            + "; Log. texto: " + str(len(mi.txt_total))
+            + "; Desplazamiento: " + str(mi.desp_x))
         v["zona_respuest"].refresh()
 
         # Si la ventana está desbordada
@@ -224,7 +244,7 @@ class Zona_ES:
 
     def poncar(mi, carácter):
         """
-        Pon carácter alfanumérico en la zona de e/s
+        Pon carácter imprimible en la caja
         """
 
         v["zona_respuest"].erase()
@@ -232,7 +252,8 @@ class Zona_ES:
               "Cursor: " + str(mi.cursor_x)
             + "; Pos. texto: " + str(mi.puntero_txt)
             + "; Ancho: " + str(mi.ancho)
-            + "; Log. texto: " + str(len(mi.txt_total)))
+            + "; Log. texto: " + str(len(mi.txt_total))
+            + "; Desplazamiento: " + str(mi.desp_x))
         v["zona_respuest"].refresh()
 
         # Texto memorizado: añade carácter y avanza puntero
@@ -275,7 +296,7 @@ class Zona_ES:
 
     def traecar(mi):
         """
-        Trae carácter alfanumérico de la zona de e/s
+        Trae carácter imprimible de la caja
         """
         c1 = mi.ventana.getch()
         car = octetos(c1)
@@ -293,7 +314,7 @@ class Zona_ES:
 
     def borrcar(mi):
         """
-        Borra carácter a la izquierda del cursor y retrocedelo una posición
+        Borra carácter a la izquierda del cursor y retrocede una posición
         """
 
         # Texto visible
@@ -314,8 +335,7 @@ class Zona_ES:
 
     def reinicia(mi):
         """
-        Borra zona de e/s y pon el cursor al inicio. También borra la copia de
-        lo que se ve en la ventana (txt_ventn)
+        Borra contenido de la caja y pon el cursor al inicio.
         """
         mi.ventana.erase()
         mi.ventana.addstr(0, 0, mi.indicador)
@@ -324,10 +344,9 @@ class Zona_ES:
 
     def borra_y_reinicia(mi):
         """
-        Borra zona de e/s y pon el cursor al inicio. El borrado incluye el
-        texto completo (txt_total), y el que se ve en la ventana (txt_ventn)
+        Borra contenido de la caja y pon el cursor al inicio. También se borra
+        el texto que no se ve.
         """
-        mi.txt_ventn = ""
         mi.txt_total = ""
         mi.reinicia()
 
@@ -362,7 +381,7 @@ def inicio(terminal):
     crea_panel_de_ventanas(terminal, v)
 
     # Posición inicial del cursor
-    zona_pregunta = Zona_ES(v["zona_pregunta"], 0, 2)
+    caja_pregunta = CajaTxt(v["caja_pregunta"], 0, 2)
 
     ## Borrar ##
     # Variables para el desplazamiento vertical.
@@ -371,10 +390,11 @@ def inicio(terminal):
     ## Borrar ##
 
     while True:
-        c = zona_pregunta.traecar()
+        c = caja_pregunta.traecar()
 
         if   c == v_tecla["REDIMENSIONA"]:
             redimensiona(terminal, v)
+            caja_pregunta.redimensiona()
         elif c == v_tecla["CTRL_D"]:
             break;
         elif c == v_tecla["TABULADOR"]:
@@ -385,7 +405,7 @@ def inicio(terminal):
             # Pintar respuesta en zona_respuest
             pass
             # Borrar para realizar otra pregunta
-            zona_pregunta.borra_y_reinicia()
+            caja_pregunta.borra_y_reinicia()
         ## Borrar ##
         elif c == v_tecla["FLECHA_ARRIBA"]:
             dv = max(0, dv - 1)
@@ -393,14 +413,14 @@ def inicio(terminal):
             dv = min(len(texto) - h, dv + 1)
         ## Borrar ##
         elif c == v_tecla["FLECHA_IZQUIERDA"]:
-            zona_pregunta.resta_x(1)
+            caja_pregunta.resta_x(1)
         elif c == v_tecla["FLECHA_DERECHA"]:
-            zona_pregunta.suma_x(1)
+            caja_pregunta.suma_x(1)
         elif (   c == v_tecla["RETROCESO_1"]
               or c == v_tecla["RETROCESO_2"]):
-            zona_pregunta.borrcar()
+            caja_pregunta.borrcar()
         else: # Pon en la ventana si es un carácter imprimible
-            zona_pregunta.poncar(dec(c))
+            caja_pregunta.poncar(dec(c))
 
         ## Borrar ##
 #        v["zona_respuest"].erase()
@@ -410,14 +430,14 @@ def inicio(terminal):
         ## Borrar ##
 
         # Mueve el cursor a la posición actual
-        zona_pregunta.mcursor()
+        caja_pregunta.mcursor()
 
     terminal.keypad(False)
     curses.nocbreak()
     curses.echo()
     curses.endwin()
 
-    print (zona_pregunta.txt_total)
+    print (caja_pregunta.txt_total)
 
 # Ejecutar el programa
 if __name__ == "__main__":
