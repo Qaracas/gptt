@@ -134,24 +134,25 @@ class CajaTxt:
         n_alto, n_ancho = mi.ventana.getmaxyx()
 
         # Eje x: Diferencia
-        dif_x = n_ancho - mi.ancho
+        dif_x = abs(n_ancho - mi.ancho)
 
-        # Eje y: Incremento
+        # Eje y: Diferencia
         # inc_y = n_alto - mi.alto
 
-        # Cambia dimensión de la caja
-        mi.alto = n_alto
-        mi.ancho = n_ancho
-
         # Eje x: Recoloca cursor
-        if mi.cursor_x > mi.ancho:
-            mi.cursor_x = mi.ancho - 2
-            mi.puntero_txt = 
+        if mi.cursor_x > n_ancho:
+            resta_x = (dif_x - (mi.ancho - mi.cursor_x)) + 1
+            mi.cursor_x -= resta_x
+            mi.puntero_txt -= resta_x
 
         # Eje x: Redibuja texto a partir del cursor
         mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
             mi.txt_total[mi.puntero_txt:
-                mi.puntero_txt + (mi.ancho - len(mi.indicador) - mi.cursor_x) + 1])
+                mi.puntero_txt + (n_ancho - len(mi.indicador) - mi.cursor_x) + 1])
+
+        # Cambia dimensión de la caja
+        mi.alto = n_alto
+        mi.ancho = n_ancho
 
     def mcursor(mi, y = None, x = None):
         """
@@ -187,9 +188,12 @@ class CajaTxt:
             # Desplaza texto
             mi.reinicia()
             mi.desp_x += mi.SALTO
-            mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
-                mi.txt_total[mi.desp_x:
-                    mi.desp_x + (mi.ancho - len(mi.indicador) - 1)])
+            try:
+                mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
+                    mi.txt_total[mi.desp_x:
+                        mi.desp_x + (mi.ancho - len(mi.indicador))])
+            except curses.error:
+                pass
             # Mueve cursor
             mi.mcursor(0, mi.ancho - mi.SALTO - 1)
             # No es necesario ajustar puntero
@@ -225,9 +229,12 @@ class CajaTxt:
             # Desplaza texto
             mi.reinicia()
             mi.desp_x -= mi.SALTO
-            mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
-                mi.txt_total[mi.desp_x:
-                    mi.desp_x + (mi.ancho - len(mi.indicador) - 1)])
+            try:
+                mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
+                    mi.txt_total[mi.desp_x:
+                        mi.desp_x + (mi.ancho - len(mi.indicador))])
+            except curses.error:
+                pass
             # Mueve cursor
             mi.mcursor(0, mi.SALTO)
             # Ajusta puntero
@@ -271,22 +278,34 @@ class CajaTxt:
             # Si hay texto a la derecha del cursor se desplaza
             if txt_drcha:
                 if mi.cursor_x + len(txt_drcha) > mi.ancho - 1:
-                    txt_drcha = txt_drcha[0:len(txt_drcha) - 1]
+                    txt_drcha = txt_drcha[0:len(txt_drcha)]
                 mi.ventana.addstr(mi.cursor_y, mi.cursor_x, txt_drcha)
 
         except curses.error:
             # Cuando desborda la ventana
             if mi.cursor_x < mi.ancho - 1:
+                # Si no es el final de la caja no pasa nada
                 pass
             else:
+                # Al final de la caja retrocedemos texto un SALTO
+                v_cursor_x = mi.cursor_x;
+
                 mi.reinicia()
                 mi.desp_x += mi.SALTO
-                mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
-                    mi.txt_total[mi.desp_x:
-                        mi.desp_x + (mi.ancho - len(mi.indicador))])
-                txt_drcha = dec(mi.ventana.instr(mi.cursor_y,
-                    mi.cursor_x)).rstrip()
-                mi.mcursor(0, len(txt_drcha) + len(mi.indicador))
+                try:
+                    mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
+                        mi.txt_total[mi.desp_x:
+                            mi.desp_x + (mi.ancho - len(mi.indicador))])
+                except curses.error:
+                    pass
+
+                # Coloca cursor en función de si es final de texto
+                if mi.puntero_txt == len(mi.txt_total):
+                    txt_drcha = dec(mi.ventana.instr(mi.cursor_y,
+                        mi.cursor_x)).rstrip()
+                    mi.mcursor(0, len(txt_drcha) + len(mi.indicador))
+                else:
+                    mi.mcursor(0, v_cursor_x - mi.SALTO + 1)
 
     def __existe_tecla(mi, tecla):
         for clave, valor in v_diccionario_teclas.items():
@@ -323,10 +342,26 @@ class CajaTxt:
             mi.cursor_x = max(mi.cursor_x - 1, len(mi.indicador))
 
             # Si la ventana está desbordada
-            if len(mi.txt_total[mi.desp_x:]) > mi.ancho - len(mi.indicador) - 1:
-                mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
-                    mi.txt_total[mi.puntero_txt:
-                        mi.puntero_txt + (mi.ancho - len(mi.indicador) - mi.cursor_x) + 1])
+            try:
+                if len(mi.txt_total[mi.desp_x:]) > mi.ancho - len(mi.indicador) - 1:
+                    mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
+                        mi.txt_total[mi.puntero_txt:
+                            mi.puntero_txt + (mi.ancho - len(mi.indicador) - mi.cursor_x) + 2])
+            except curses.error:
+                pass
+        else:
+            if mi.desp_x > 0:
+                # Deshaz desplazamiento
+                mi.reinicia()
+                mi.desp_x -= mi.SALTO
+                # Repinta texto
+                try:
+                    mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
+                        mi.txt_total[mi.desp_x:
+                            mi.desp_x + (mi.ancho - len(mi.indicador))])
+                except curses.error:
+                    pass
+                # Coloca cursor
 
         # Texto memorizado
         if mi.puntero_txt > 0:
