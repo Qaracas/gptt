@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-import locale
+import config
 import curses
+import locale
 import sys
+import srv.ia.controlador
 
 #
 # Funciones básicas
@@ -14,6 +16,8 @@ def octetos(val):
 #
 # Variables globales
 ################################################################################
+
+versión = "1.0"
 
 v_codificación = locale.getpreferredencoding()
 v_alto  = 0
@@ -91,8 +95,11 @@ def crea_panel_de_ventanas(terminal, ventanas):
         ventanas[i].erase()
 
     # Colorea la barras de título y modo
-    ventanas["franja_título"].bkgd(' ', curses.color_pair(1))
-    ventanas["franja_estado"].bkgd(' ', curses.color_pair(1))
+    if curses.has_colors() and curses.can_change_color():
+        ventanas["franja_título"].bkgd(' ', curses.color_pair(1))
+        ventanas["franja_estado"].bkgd(' ', curses.color_pair(1))
+
+    ventanas["franja_título"].addstr(0, 1, "Gptt v" + versión, curses.color_pair(2))
 
     # Refresca
     for i in ventanas:
@@ -111,16 +118,23 @@ class CajaTxt:
     def SALTO(mi):
         return 20
 
-    def __init__(mi, ventn, y, x, sno = "> "):
-        mi.ventana         = ventn
-        mi.indicador       = sno
+    def __init__(mi, vntn, y = 0, x = 0, indc = "> "):
+        mi.ventana         = vntn
+        mi.indicador       = indc
         mi.cursor_y        = y
-        mi.cursor_x        = x
+        mi.cursor_x        = 0
         mi.txt_total       = ""
         mi.puntero_txt     = 0
         mi.desp_x          = 0
         mi.desp_y          = 0
         mi.alto, mi.ancho  = mi.ventana.getmaxyx()
+        mi.bloqueada       = False
+
+        # Posición del cursor
+        if x > 0:
+            mi.cursor_x = x
+        else:
+            mi.cursor_x = len(indc)
 
         mi.ventana.addstr(0, 0, mi.indicador)
         mi.ventana.keypad(True)
@@ -131,28 +145,28 @@ class CajaTxt:
         Actualiza dimensiones de la caja
         """
         # Nueva dimensión de la pantalla
-        n_alto, n_ancho = mi.ventana.getmaxyx()
+        mi.alto, mi.ancho = mi.ventana.getmaxyx()
 
-        # Eje x: Diferencia
-        dif_x = abs(n_ancho - mi.ancho)
-
-        # Eje y: Diferencia
-        # inc_y = n_alto - mi.alto
+        # Bloqua caja si ventana es pequeña
+        if mi.ancho < mi.SALTO + len(mi.indicador):
+            mi.bloqueada = True
+        else:
+            mi.bloqueada = False
 
         # Eje x: Recoloca cursor
-        if mi.cursor_x > n_ancho:
-            resta_x = (dif_x - (mi.ancho - mi.cursor_x)) + 1
+        if mi.cursor_x > mi.ancho:
+            resta_x =  mi.cursor_x - mi.ancho
+
             mi.cursor_x -= resta_x
             mi.puntero_txt -= resta_x
 
         # Eje x: Redibuja texto a partir del cursor
-        mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
-            mi.txt_total[mi.puntero_txt:
-                mi.puntero_txt + (n_ancho - len(mi.indicador) - mi.cursor_x) + 1])
-
-        # Cambia dimensión de la caja
-        mi.alto = n_alto
-        mi.ancho = n_ancho
+        try:
+            mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
+                mi.txt_total[mi.puntero_txt:
+                    mi.puntero_txt + (mi.ancho - mi.cursor_x)])
+        except curses.error:
+            pass
 
     def mcursor(mi, y = None, x = None):
         """
@@ -166,38 +180,37 @@ class CajaTxt:
             x = mi.cursor_x
         else:
             mi.cursor_x = x
-        mi.ventana.move(y, x)
+
+        try:
+            mi.ventana.move(y, x)
+        except curses.error:
+            pass
 
     def suma_x(mi, cantidad):
         """
         Suma 'cantidad' a la posición x del cursor y al índice del texto
         """
-
-        v["zona_respuest"].erase()
-        v["zona_respuest"].addstr(0, 0,
-              "Cursor: " + str(mi.cursor_x)
-            + "; Pos. texto: " + str(mi.puntero_txt)
-            + "; Ancho: " + str(mi.ancho)
-            + "; Log. texto: " + str(len(mi.txt_total))
-            + "; Desplazamiento: " + str(mi.desp_x))
-        v["zona_respuest"].refresh()
+        # Si la caja está bloqueada no se actúa
+        if mi.bloqueada:
+            return
 
         # Si la ventana está desbordada
         if (    mi.cursor_x == (mi.ancho - 1)
             and len(mi.txt_total) > (mi.ancho - len(mi.indicador) - 1)):
-            # Desplaza texto
+            # Desplaza texto alante
             mi.reinicia()
             mi.desp_x += mi.SALTO
+
+            # Repinta texto
             try:
                 mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
                     mi.txt_total[mi.desp_x:
                         mi.desp_x + (mi.ancho - len(mi.indicador))])
             except curses.error:
                 pass
+
             # Mueve cursor
             mi.mcursor(0, mi.ancho - mi.SALTO - 1)
-            # No es necesario ajustar puntero
-            # mi.puntero_txt = mi.desp_x
 
         # Texto visible
         txt_ventn = mi.trae_txt_visible()
@@ -213,32 +226,27 @@ class CajaTxt:
         """
         Resta 'cantidad' a la posición x del cursor y al índice del texto
         """
-
-        v["zona_respuest"].erase()
-        v["zona_respuest"].addstr(0, 0,
-              "Cursor: " + str(mi.cursor_x)
-            + "; Pos. texto: " + str(mi.puntero_txt)
-            + "; Ancho: " + str(mi.ancho)
-            + "; Log. texto: " + str(len(mi.txt_total))
-            + "; Desplazamiento: " + str(mi.desp_x))
-        v["zona_respuest"].refresh()
+        # Si la caja está bloqueada no se actúa
+        if mi.bloqueada:
+            return
 
         # Si la ventana está desbordada
         if (    mi.cursor_x == len(mi.indicador)
             and mi.desp_x > 0):
-            # Desplaza texto
+            # Desplaza texto atrás
             mi.reinicia()
             mi.desp_x -= mi.SALTO
+
+            # Repinta texto
             try:
                 mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
                     mi.txt_total[mi.desp_x:
                         mi.desp_x + (mi.ancho - len(mi.indicador))])
             except curses.error:
                 pass
+
             # Mueve cursor
-            mi.mcursor(0, mi.SALTO)
-            # Ajusta puntero
-            mi.puntero_txt -= 2
+            mi.mcursor(0, mi.SALTO + len(mi.indicador))
 
         # Texto visible: retrocede posición del cursor
         mi.cursor_x = max(mi.cursor_x - cantidad, len(mi.indicador))
@@ -253,15 +261,9 @@ class CajaTxt:
         """
         Pon carácter imprimible en la caja
         """
-
-        v["zona_respuest"].erase()
-        v["zona_respuest"].addstr(0, 0,
-              "Cursor: " + str(mi.cursor_x)
-            + "; Pos. texto: " + str(mi.puntero_txt)
-            + "; Ancho: " + str(mi.ancho)
-            + "; Log. texto: " + str(len(mi.txt_total))
-            + "; Desplazamiento: " + str(mi.desp_x))
-        v["zona_respuest"].refresh()
+        # Si la caja está bloqueada no se actúa
+        if mi.bloqueada:
+            return
 
         # Texto memorizado: añade carácter y avanza puntero
         mi.txt_total = mi.__poncar(mi.txt_total, carácter, mi.puntero_txt)
@@ -275,10 +277,8 @@ class CajaTxt:
             mi.ventana.addch(mi.cursor_y, mi.cursor_x, carácter)
             mi.cursor_x = min(mi.cursor_x + 1, mi.ancho - 1)
 
-            # Si hay texto a la derecha del cursor se desplaza
+            # Si hay texto a la derecha del cursor, desplázalo una posición
             if txt_drcha:
-                if mi.cursor_x + len(txt_drcha) > mi.ancho - 1:
-                    txt_drcha = txt_drcha[0:len(txt_drcha)]
                 mi.ventana.addstr(mi.cursor_y, mi.cursor_x, txt_drcha)
 
         except curses.error:
@@ -288,7 +288,7 @@ class CajaTxt:
                 pass
             else:
                 # Al final de la caja retrocedemos texto un SALTO
-                v_cursor_x = mi.cursor_x;
+                v_cursor_x = mi.cursor_x
 
                 mi.reinicia()
                 mi.desp_x += mi.SALTO
@@ -301,11 +301,10 @@ class CajaTxt:
 
                 # Coloca cursor en función de si es final de texto
                 if mi.puntero_txt == len(mi.txt_total):
-                    txt_drcha = dec(mi.ventana.instr(mi.cursor_y,
-                        mi.cursor_x)).rstrip()
-                    mi.mcursor(0, len(txt_drcha) + len(mi.indicador))
+                    txt_drcha = dec(mi.ventana.instr(mi.cursor_y, mi.cursor_x)).rstrip()
+                    mi.mcursor(mi.cursor_y, len(txt_drcha) + len(mi.indicador))
                 else:
-                    mi.mcursor(0, v_cursor_x - mi.SALTO + 1)
+                    mi.mcursor(mi.cursor_y, v_cursor_x - mi.SALTO + 1)
 
     def __existe_tecla(mi, tecla):
         for clave, valor in v_diccionario_teclas.items():
@@ -335,6 +334,9 @@ class CajaTxt:
         """
         Borra carácter a la izquierda del cursor y retrocede una posición
         """
+        # Si la caja está bloqueada no se actúa
+        if mi.bloqueada:
+            return
 
         # Texto visible
         if mi.cursor_x > len(mi.indicador):
@@ -346,14 +348,15 @@ class CajaTxt:
                 if len(mi.txt_total[mi.desp_x:]) > mi.ancho - len(mi.indicador) - 1:
                     mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
                         mi.txt_total[mi.puntero_txt:
-                            mi.puntero_txt + (mi.ancho - len(mi.indicador) - mi.cursor_x) + 2])
+                            mi.puntero_txt + (mi.ancho - mi.cursor_x)])
             except curses.error:
                 pass
         else:
             if mi.desp_x > 0:
-                # Deshaz desplazamiento
+                # Desplaza texto atrás
                 mi.reinicia()
                 mi.desp_x -= mi.SALTO
+
                 # Repinta texto
                 try:
                     mi.ventana.addstr(mi.cursor_y, mi.cursor_x,
@@ -361,7 +364,12 @@ class CajaTxt:
                             mi.desp_x + (mi.ancho - len(mi.indicador))])
                 except curses.error:
                     pass
+
                 # Coloca cursor
+                mi.mcursor(0, mi.SALTO + len(mi.indicador))
+                # Borra carácter (recursivo)
+                mi.borrcar()
+                return
 
         # Texto memorizado
         if mi.puntero_txt > 0:
@@ -375,7 +383,7 @@ class CajaTxt:
         mi.ventana.erase()
         mi.ventana.addstr(0, 0, mi.indicador)
         mi.ventana.refresh()
-        mi.mcursor(0, len(mi.indicador));
+        mi.mcursor(0, len(mi.indicador))
 
     def borra_y_reinicia(mi):
         """
@@ -415,8 +423,8 @@ def inicio(terminal):
 #    v = {}
     crea_panel_de_ventanas(terminal, v)
 
-    # Posición inicial del cursor
-    caja_pregunta = CajaTxt(v["caja_pregunta"], 0, 2)
+    # Crear caja pregunta
+    caja_pregunta = CajaTxt(v["caja_pregunta"])
 
     ## Borrar ##
     # Variables para el desplazamiento vertical.
@@ -431,12 +439,12 @@ def inicio(terminal):
             redimensiona(terminal, v)
             caja_pregunta.redimensiona()
         elif c == v_tecla["CTRL_D"]:
-            break;
+            break
         elif c == v_tecla["TABULADOR"]:
             # Pintar pregunta en zona_respuest
             pass
             # Enviar solicitud a la IA
-            pass
+            respuesta = srv.ia.controlador.pregunta("opengpts", caja_pregunta.txt_total)
             # Pintar respuesta en zona_respuest
             pass
             # Borrar para realizar otra pregunta
@@ -465,7 +473,10 @@ def inicio(terminal):
         ## Borrar ##
 
         # Mueve el cursor a la posición actual
-        caja_pregunta.mcursor()
+        try:
+            caja_pregunta.mcursor()
+        except curses.error:
+            pass
 
     terminal.keypad(False)
     curses.nocbreak()
@@ -474,17 +485,16 @@ def inicio(terminal):
 
     print (caja_pregunta.txt_total)
 
-# Ejecutar el programa
+# Ejecuta el programa
 if __name__ == "__main__":
     stdscr = curses.initscr()
 
-    # Colores por defecto, mostrar el cursor y desactiva eco
-    curses.start_color()
-    curses.use_default_colors()
+    # Muestra cursor y desactiva eco
     curses.curs_set(1)
     curses.noecho()
 
-    curses.init_pair(1, curses.COLOR_BLUE, curses.COLOR_BLUE)
+    # Configuración general
+    config.colores()
 
     curses.wrapper(inicio)
 
