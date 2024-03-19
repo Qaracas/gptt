@@ -1,55 +1,68 @@
 import requests
 import json
+import re
 
 from random import randrange
+from gpt.base.agente import Agente
 
-def texto_aleatorio(bulto):
-    c = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+class OpenGpts(Agente):
+    """
+    """
+    def __init__(mi):
+        super().__init__(
+                url = "https://opengpts-example-vz4y4ooboq-uc.a.run.app/runs/stream",
+                cabeceras_http = {
+                    "Authority"       : "opengpts-example-vz4y4ooboq-uc.a.run.app",
+                    "Accept"          : "text/event-stream",
+                    "Accept-Language" : "en-US,en;q=0.7",
+                    "cache-Control"   : "no-cache",
+                    "Content-Type"    : "application/json",
+                    "Cookie"          : "opengpts_user_id=" + mi.__texto_aleatorio(36),
+                    "Origin"          : "https://opengpts-example-vz4y4ooboq-uc.a.run.app",
+                    "Pragma"          : "no-cache",
+                    "Referer"         : "https://opengpts-example-vz4y4ooboq-uc.a.run.app/",
+                    "Sec-Fetch-Site"  : "same-origin",
+                    "Sec-GPC"         : "1",
+                    "User-Agent"      : "Gptt/1.0"
+                }
+        )
 
-    resultado = []
-    for i in range(bulto):
-        resultado.append(c[randrange(len(c))])
+    def __texto_aleatorio(mi, bulto):
+        c = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
 
-    return ''.join(resultado)
+        resultado = []
+        for i in range(bulto):
+            resultado.append(c[randrange(len(c))])
 
+        return ''.join(resultado)
 
-
-pregunta = "Por favor, define selva."
-
-solicitud = {
-    "input": [
-        {
-            "content": pregunta,
-            "additional_kwargs": {},
-            "type": "human",
-            "example": False
+    def _Agente__pregunta(mi, pregunta):
+        solicitud = {
+            "input": [
+                {
+                    "content": pregunta,
+                    "additional_kwargs": {},
+                    "type": "human",
+                    "example": False
+                }
+            ],
+            "assistant_id": "bdc5981d-483e-44a8-bb42-1cced28c3574",
+            "thread_id": ""
         }
-    ],
-    "assistant_id": "bdc5981d-483e-44a8-bb42-1cced28c3574",
-    "thread_id": ""
-}
 
-solicitud_json = json.dumps(solicitud)
+        # Codifica solicitud a un texto JSON
+        solicitud_json = json.dumps(solicitud)
 
+        # Realiza la solicitud POST
+        respuesta = requests.post(mi.url, data=solicitud_json, headers=mi.cabeceras_http)
 
-# Encabezados de la solicitud
-cabeceras_http = {
-    "Authority"       : "opengpts-example-vz4y4ooboq-uc.a.run.app",
-    "Accept"          : "text/event-stream",
-    "Accept-Language" : "en-US,en;q=0.7",
-    "cache-Control"   : "no-cache",
-    "Content-Type"    : "application/json",
-    "Cookie"          : "opengpts_user_id=" + texto_aleatorio(36),
-    "Origin"          : "https://opengpts-example-vz4y4ooboq-uc.a.run.app",
-    "Pragma"          : "no-cache",
-    "Referer"         : "https://opengpts-example-vz4y4ooboq-uc.a.run.app/",
-    "Sec-Fetch-Site"  : "same-origin",
-    "Sec-GPC"         : "1",
-    "User-Agent"      : "Gptt/1.0"
-}
+        return respuesta.text
 
-# Realizar la solicitud POST
-url = "https://opengpts-example-vz4y4ooboq-uc.a.run.app/runs/stream"
-respuesta = requests.post(url, data=solicitud_json, headers=cabeceras_http)
+    def _Agente__procesa_respuesta(mi, respuesta):
+        # Trae la respuesta final
+        respuesta_json = re.findall(r'event: data\r\ndata: (.*)\r\n\r\nevent: end\r\n\r\n',
+            respuesta)[0]
+        # Descodifica a un objeto
+        respuesta = json.loads(respuesta_json)
 
-print(respuesta.text)
+        return respuesta[1]["content"]

@@ -2,25 +2,26 @@ import json
 from abc import ABC, abstractmethod
 
 
-class Proveedor(ABC):
-
-    def __init__(mi, solicitud, cabeceras_http):
-        mi.solicitud_json = json.dumps(solicitud)
+class Agente(ABC):
+    """
+    """
+    def __init__(mi, url = None, cabeceras_http = None):
+        mi.url = url
         mi.cabeceras_http = cabeceras_http
 
     @abstractmethod
     def __pregunta(mi, pregunta):
         """
-        Envía al proveddor de IA remoto la pregunta que se le pasa como parámetro
+        Envía al proveddor de IA remoto la pregunta
         """
-        pass
+        raise NotImplementedError("Este método debe ser implementado por una subclase.")
 
     @abstractmethod
     def __procesa_respuesta(mi, respuesta):
         """
-        Devuelve procesada la respuesta que se le pasa como parámetro
+        Devuelve procesada la respuesta obtenida anteriormente
         """
-        pass
+        raise NotImplementedError("Este método debe ser implementado por una subclase.")
 
     def pregunta(mi, pregunta):
         """

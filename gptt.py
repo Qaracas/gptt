@@ -3,7 +3,8 @@ import config
 import curses
 import locale
 import sys
-import srv.ia.controlador
+
+from gpt.base.gestor import Gestor
 
 #
 # Funciones básicas
@@ -444,7 +445,8 @@ def inicio(terminal):
             # Pintar pregunta en zona_respuest
             pass
             # Enviar solicitud a la IA
-            respuesta = srv.ia.controlador.pregunta("opengpts", caja_pregunta.txt_total)
+            gestor = Gestor()
+            respuesta = gestor.pregunta("opengpts", caja_pregunta.txt_total)
             # Pintar respuesta en zona_respuest
             pass
             # Borrar para realizar otra pregunta

@@ -1,11 +1,15 @@
-proveedores_ia = {
-    "blackboxai": ClaseConcretaA(),
-    "koboldai"  : ClaseConcretaB()
-}
+from gpt.agentes.opengpts import OpenGpts
 
-def pregunta(nombre_proveedor, pregunta):
-    if nombre_proveedor in proveedores_ia:
-        proveedor = proveedores_ia[nombre_proveedor]
-        proveedor.pregunta(pregunta)
-    else:
-        print(f"No se encontró proveedor '{nombre_proveedor}'.")
+class Gestor:
+
+    def __init__(mi):
+        mi.proveedores_ia = {
+            "opengpts" : OpenGpts()
+        }
+
+    def pregunta(mi, nombre_proveedor, pregunta):
+        if nombre_proveedor in mi.proveedores_ia:
+            proveedor = mi.proveedores_ia[nombre_proveedor]
+            return proveedor.pregunta(pregunta)
+        else:
+            return f"No se encontró proveedor '{nombre_proveedor}'."
