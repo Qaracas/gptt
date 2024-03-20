@@ -1,15 +1,23 @@
-from gpt.agentes.opengpts import OpenGpts
+from gpt.agentes.opengpts import *
 
 class Gestor:
-
+    """
+    """
     def __init__(mi):
-        mi.proveedores_ia = {
+        mi.agentes_ia = {
             "opengpts" : OpenGpts()
         }
 
-    def pregunta(mi, nombre_proveedor, pregunta):
-        if nombre_proveedor in mi.proveedores_ia:
-            proveedor = mi.proveedores_ia[nombre_proveedor]
-            return proveedor.pregunta(pregunta)
+    def pregunta(mi, nombre_agente, pregunta):
+        if nombre_agente in mi.agentes_ia:
+            agente = mi.agentes_ia[nombre_agente]
+            return agente.pregunta(pregunta)
         else:
-            return f"No se encontró proveedor '{nombre_proveedor}'."
+            raise ExcepcionAgenteNoEncontrado(f"No se encontró el agente: '{nombre_agente}'.")
+
+class ExcepcionAgenteNoEncontrado(Exception):
+    def __init__(mi, mensaje):
+        mi.mensaje = mensaje
+
+    def __str__(mi):
+        return mi.mensaje
